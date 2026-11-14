@@ -40,12 +40,13 @@ class TrailingStopRiskManagementModel(RiskManagementModel):
                 continue
 
             position = PositionSide.LONG if security.holdings.is_long else PositionSide.SHORT
-            absolute_holdings_value = security.holdings.absolute_holdings_value
+            # per-unit value so that changes in position size are not mistaken for price moves
+            absolute_holdings_value = security.holdings.absolute_holdings_value / abs(security.holdings.quantity)
             trailing_absolute_holdings_state = self.trailing_absolute_holdings_state.get(symbol)
 
             # Add newly invested security (if doesn't exist) or reset holdings state (if position changed)
             if trailing_absolute_holdings_state == None or position != trailing_absolute_holdings_state.position:
-                self.trailing_absolute_holdings_state[symbol] = trailing_absolute_holdings_state = self.HoldingsState(position, security.holdings.absolute_holdings_cost)
+                self.trailing_absolute_holdings_state[symbol] = trailing_absolute_holdings_state = self.HoldingsState(position, security.holdings.absolute_holdings_cost / abs(security.holdings.quantity))
 
             trailing_absolute_holdings_value = trailing_absolute_holdings_state.absolute_holdings_value
 

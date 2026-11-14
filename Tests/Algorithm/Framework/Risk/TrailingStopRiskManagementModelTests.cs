@@ -104,6 +104,63 @@ namespace QuantConnect.Tests.Algorithm.Framework.Risk
             }
         }
 
+        [TestCase(Language.CSharp)]
+        [TestCase(Language.Python)]
+        public void ChangingPositionSizeAtUnchangedPriceIsNotADrawdown(Language language)
+        {
+            var security = new Mock<Security>(
+                Symbols.AAPL,
+                SecurityExchangeHours.AlwaysOpen(TimeZones.NewYork),
+                new Cash(Currencies.USD, 1000m, 1m),
+                SymbolProperties.GetDefault(Currencies.USD),
+                ErrorCurrencyConverter.Instance,
+                RegisteredSecurityDataTypesProvider.Null,
+                new SecurityCache()
+            );
+            security.CallBase = true;
+            security.Object.FeeModel = new ConstantFeeModel(0);
+            security.Setup(m => m.Invested).Returns(true);
+
+            var holding = new SecurityHolding(security.Object, new IdentityCurrencyConverter(Currencies.USD));
+            holding.SetHoldings(100m, 100m);
+            security.Object.Holdings = holding;
+
+            var algorithm = new QCAlgorithm();
+            algorithm.SetPandasConverter();
+            algorithm.Securities.Add(Symbols.AAPL, security.Object);
+            SetTrailingStopModel(algorithm, 0.05m, language);
+
+            security.Object.SetMarketPrice(new Tick(DateTime.Now, Symbols.AAPL, 100m, 100m));
+            Assert.AreEqual(0, algorithm.RiskManagement.ManageRisk(algorithm, null).Count());
+
+            // e.g. the portfolio construction model trims the position by 10%, the price doesn't move
+            holding.SetHoldings(100m, 90m);
+            Assert.AreEqual(0, algorithm.RiskManagement.ManageRisk(algorithm, null).Count());
+
+            // the stop still triggers on a real 5% drop from the peak price
+            security.Object.SetMarketPrice(new Tick(DateTime.Now, Symbols.AAPL, 94.99m, 94.99m));
+            var targets = algorithm.RiskManagement.ManageRisk(algorithm, null).ToList();
+            Assert.AreEqual(1, targets.Count);
+            Assert.AreEqual(0, targets[0].Quantity);
+        }
+
+        private static void SetTrailingStopModel(QCAlgorithm algorithm, decimal maxDrawdownPercent, Language language)
+        {
+            if (language == Language.Python)
+            {
+                using (Py.GIL())
+                {
+                    const string name = nameof(TrailingStopRiskManagementModel);
+                    var instance = Py.Import(name).GetAttr(name).Invoke(maxDrawdownPercent.ToPython());
+                    algorithm.SetRiskManagement(new RiskManagementModelPythonWrapper(instance));
+                }
+            }
+            else
+            {
+                algorithm.SetRiskManagement(new TrailingStopRiskManagementModel(maxDrawdownPercent));
+            }
+        }
+
         static IEnumerable<TestCaseData> GenerateTestData()
         {
             Language[] languages = new Language[] { Language.CSharp, Language.Python };

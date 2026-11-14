@@ -58,14 +58,15 @@ namespace QuantConnect.Algorithm.Framework.Risk
                 }
 
                 var position = security.Holdings.IsLong ? PositionSide.Long : PositionSide.Short;
-                var absoluteHoldingsValue = security.Holdings.AbsoluteHoldingsValue;
+                // per-unit value so that changes in position size are not mistaken for price moves
+                var absoluteHoldingsValue = security.Holdings.AbsoluteHoldingsValue / Math.Abs(security.Holdings.Quantity);
                 HoldingsState trailingAbsoluteHoldingsState;
 
                 // Add newly invested security (if doesn't exist) or reset holdings state (if position changed)
                 if (!_trailingAbsoluteHoldingsState.TryGetValue(symbol, out trailingAbsoluteHoldingsState) ||
                     position != trailingAbsoluteHoldingsState.Position)
                 {
-                    _trailingAbsoluteHoldingsState[symbol] = trailingAbsoluteHoldingsState = new HoldingsState(position, security.Holdings.AbsoluteHoldingsCost);
+                    _trailingAbsoluteHoldingsState[symbol] = trailingAbsoluteHoldingsState = new HoldingsState(position, security.Holdings.AbsoluteHoldingsCost / Math.Abs(security.Holdings.Quantity));
                 }
 
                 var trailingAbsoluteHoldingsValue = trailingAbsoluteHoldingsState.AbsoluteHoldingsValue;
